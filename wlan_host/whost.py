@@ -2,8 +2,8 @@
 # Copyright Kevin Köck 2021 Released under the MIT license
 # Created on 2021-02-06 
 
-__updated__ = "2021-02-09"
-__version__ = "0.2"
+__updated__ = "2021-02-10"
+__version__ = "0.3"
 
 import gc
 from micropython import const
@@ -13,18 +13,13 @@ from wlan_link_libs.uart import WUart
 import time
 from machine import Pin
 from wlan_link_libs.profiler import Profiler
-from .CommandHandler import wlanHandler
+from .command_handler import wlanHandler
 import json
 import network
 
 Profiler.active = False
 
 _wlan_host = None
-
-
-def get_host():
-    return _wlan_host
-
 
 _MAX_LEN_PAYLOAD = const(400)
 _MAX_LEN_PACKET = const(500)
@@ -78,6 +73,8 @@ class WlanHost:
                     self._frames.send_false(cmd, resp[1:] if len(resp) > 1 else None)
                 elif resp[0] == OSError:
                     self._frames.send_oserror(cmd, resp[1])
+                elif type(resp[0]) == OSError:
+                    self._frames.send_oserror(cmd, resp[0].args[0])
                 elif isinstance(resp[0], Exception):
                     self._frames.send_exception(cmd, resp[0])
                 else:
@@ -88,13 +85,16 @@ class WlanHost:
                     sys.print_exception(e)
                 continue
             etu = time.ticks_us()
-            print("Time to write", time.ticks_diff(etu, stu))
+            print("Time to answer sent", time.ticks_diff(etu, stu))
             print("Whost got packet", cmd, response_code, params)
-            for param in params:
-                if type(param) == bytearray:
-                    print(bytes(param))
-                else:
-                    print(param)
+            try:
+                for param in params:
+                    if type(param) in (bytearray, memoryview):
+                        print(bytes(param))
+                    else:
+                        print(param)
+            except:
+                pass
             gc.collect()
 
     @wlanHandler.register(_CMD_HOST_AVAILABLE)
@@ -110,3 +110,11 @@ class WlanHost:
         st["mem_free"] = gc.mem_free()
         st["wlan_connected"] = network.WLAN(network.STA_IF).isconnected()
         return True, json.dumps(st).encode()
+
+    @staticmethod
+    def transform_args(param: memoryview, param_type: int | float | str | bytearray | bytes):
+        return Frames.transform_args(param, param_type)
+
+
+def get_host() -> WlanHost:
+    return _wlan_host

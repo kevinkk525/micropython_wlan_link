@@ -2,8 +2,8 @@
 # Copyright Kevin Köck 2021 Released under the MIT license
 # Created on 2021-02-09 
 
-__updated__ = "2021-02-09"
-__version__ = "0.1"
+__updated__ = "2021-02-10"
+__version__ = "0.2"
 
 import gc
 import time
@@ -15,6 +15,8 @@ from wlan_link_libs.profiler import Profiler
 import json
 
 Profiler.active = True
+
+_wlan_client = None
 
 _MAX_LEN_PAYLOAD = const(400)
 _MAX_LEN_PACKET = const(500)
@@ -31,6 +33,8 @@ class WlanClient:
         self._comm = commlink
         self._debug = debug
         self._preset = reset_pin
+        global _wlan_client
+        _wlan_client = self
         reset_pin.init(mode=Pin.OUT, value=1)
         self._pready = ready_pin
         ready_pin.init(mode=Pin.IN)
@@ -57,7 +61,7 @@ class WlanClient:
 
     def connected(self) -> bool:
         try:
-            resp, payload = self._frames.send_cmd_wait_answer(_CMD_HOST_AVAILABLE)
+            self._frames.send_cmd_wait_answer(_CMD_HOST_AVAILABLE)
             # resp can only be true, otherwise module is not reachable -> OSError in Communication
         except OSError as e:
             if self._debug >= 1:
@@ -70,17 +74,32 @@ class WlanClient:
     def status(self, key=None):
         """returns multiple information about #sockets, mem_free, wifi status ..."""
         try:
-            resp, payload = self._frames.send_cmd_wait_answer(_CMD_HOST_STATUS)
+            payload = self._frames.send_cmd_wait_answer(_CMD_HOST_STATUS)
         except OSError as e:
             if self._debug >= 1:
                 print("Connection issue", e)
-            return False
+            raise
         finally:
             gc.collect()
-        if resp:
-            print("Status recv", payload)
-            st = json.loads(payload)
-            if key:
-                return st[key]
-            else:
-                return st
+        st = json.loads(payload)
+        if key:
+            return st[key]
+        else:
+            return st
+
+    def send_cmd_wait_answer(self, cmd, params: list or tuple = (), timeout=1000) -> (
+            int, list or tuple):
+        """API for client extensions"""
+        # params can actually be a single string too, Frames.create_and_send_packet turns
+        # it into a list
+        if timeout is None:
+            timeout = 100000000  # 100k seconds
+        return self._frames.send_cmd_wait_answer(cmd, params, timeout)
+
+    @staticmethod
+    def transform_args(param: memoryview, param_type: int | float | str | bytearray | bytes):
+        return Frames.transform_args(param, param_type)
+
+
+def get_client() -> WlanClient:
+    return _wlan_client

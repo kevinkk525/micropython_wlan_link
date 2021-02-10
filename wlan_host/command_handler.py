@@ -16,7 +16,7 @@ class CommandHandler:
             raise ValueError("Command_id {} already registered".format(command_id))
 
         def wrapper(f):
-            print("Setting", f.__name__, "at", command_id)
+            # print("Setting", f.__name__, "at", command_id)
             self._table[command_id] = f
             return f
 
