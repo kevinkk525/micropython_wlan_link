@@ -79,7 +79,7 @@ class WlanHost:
                 elif resp[0] == OSError:
                     self._frames.send_oserror(cmd, resp[1])
                 elif isinstance(resp[0], Exception):
-                    self._frames.send_exception(cmd, resp[1], resp[2] if len(resp) > 2 else None)
+                    self._frames.send_exception(cmd, resp[0])
                 else:
                     print("Unknown format", resp[0], resp)
             except Exception as e:

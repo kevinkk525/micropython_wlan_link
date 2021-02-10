@@ -12,6 +12,8 @@ import time
 from wlan_link_libs.uart import WUart
 from .profiler import Profiler
 
+_EXCEPTIONS = (ValueError, TypeError, AttributeError, NotImplementedError, Exception)
+
 _LEN_HEADER = 4
 _START_CMD = const(0xE0)
 _END_CMD = const(0xEE)
@@ -143,7 +145,7 @@ class Frames:
             self._sendbuf[_LEN_HEADER + i] = len(payload[i])
         return num_params
 
-    @Profiler.measure
+    # @Profiler.measure
     def _read_packet(self):
         # TODO: handle timeouts from uart
         readbuf = memoryview(self._readbuf)
@@ -174,7 +176,8 @@ class Frames:
         if self._debug >= 2:
             print("Got params")
             for param in payload:
-                print(bytes(param))
+                if param is not None:
+                    print(bytes(param))
         if resp_param:
             response_code = payload[0]
             payload.pop(0)
@@ -282,29 +285,40 @@ class Frames:
         if type(response_payload) == tuple:
             if len(response_payload) == 1:
                 response_payload = response_payload[0]
-            else:
-                params = response_payload
-                response_payload = None
         if response_code is not None and response_payload is not None and (
                 type(response_payload) != int or response_payload > 1023):
             # response payload too big for header, send both as params
             if response_payload is None:
                 response_payload = 0x00
-            params = (bytearray(1), response_payload)
+            if type(response_payload) in (list, tuple):
+                params = [bytearray(1)] + list(response_payload)
+            else:
+                params = (bytearray(1), response_payload)
             params[0][0] = response_code
             response_payload = None
         params = list(params)
         for i, param in enumerate(params):
             if type(param) in (int, float):
                 params[i] = str(param).encode()
+            elif type(param) == str:
+                params[i] = param.encode()
             elif type(param) not in (bytearray, bytes):
                 raise TypeError("param {} is not byte object".format(param))
+        print("created", cmd, response_code, response_payload, params)
         self.create_packet(cmd, response_code, response_payload, params, is_answer)
         self._write_packet(len(params), *params)
 
     @staticmethod
     def _find_exception(exc):
-        pass  # not yet implemented.
+        if isinstance(exc, Exception):  # exception got raised and will be sent back
+            t = type(exc)
+            if t in _EXCEPTIONS:
+                return _EXCEPTIONS.index(t)
+            raise TypeError("Exception type {} not supported".format(t))
+        elif type(exc) == int:  # received exception from host
+            return _EXCEPTIONS[exc]
+        else:
+            print("Exception not understood", exc)
 
     def translate_answer(self, response_code=None, params=None):
         if type(response_code) in (bytearray, memoryview):
@@ -315,11 +329,12 @@ class Frames:
             return [False] + params
         elif response_code == _RESP_OSERROR:
             raise OSError(params[0])
-        elif response_code is None:
-            if params[0] == _RESP_EXCEPTION:
-                exc = self._find_exception(params[1])
-                raise exc(params[2])
-        return params
+        elif response_code == _RESP_EXCEPTION:
+            exc = self._find_exception(int(bytes(params[0])))
+            raise exc(bytes(params[1]).decode(), True)  # e.args[2]=True to be able to distinguish
+            # between host exceptions and client exceptions during function call
+        else:
+            raise ValueError("unknown scenario", response_code, params)
 
     def send_true(self, cmd, response_payload=None):
         self.create_and_send_packet(cmd, _RESP_TRUE, response_payload, is_answer=True)
@@ -333,6 +348,7 @@ class Frames:
     def send_oserror(self, cmd, error_number=None):
         self.create_and_send_packet(cmd, _RESP_OSERROR, error_number, is_answer=True)
 
-    def send_exception(self, cmd, error_type, error_message=None):
-        self.create_and_send_packet(cmd, params=(_RESP_EXCEPTION, error_type, error_message),
+    def send_exception(self, cmd, exception):
+        exc_type = self._find_exception(exception)
+        self.create_and_send_packet(cmd, _RESP_EXCEPTION, (exc_type, exception.args[0]),
                                     is_answer=True)
