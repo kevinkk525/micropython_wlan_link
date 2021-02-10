@@ -2,8 +2,8 @@
 # Copyright Kevin Köck 2021 Released under the MIT license
 # Created on 2021-02-07 
 
-__updated__ = "2021-02-09"
-__version__ = "0.2"
+__updated__ = "2021-02-10"
+__version__ = "0.3"
 
 from micropython import const
 from wlan_link_libs.crc import crc8
@@ -29,8 +29,9 @@ _RESP_OSERROR = const(3)
 _RESP_EXCEPTION = const(4)
 
 
-# TODO: BUG: With num_params>1 each param can only be 255 bytes long because each param gets only
+# TODO: With num_params>1 each param can only be 255 bytes long because each param gets only
 #  1 byte in param_header for its length. With 1 param only it can be 1023 bytes.
+# TODO: check maximum number params
 
 # Packet structure (payload is sum of params)
 # START_CMD
@@ -201,8 +202,8 @@ class Frames:
         cmd, num_params, len_packet, response_code, params = await self._await_and_read_message()
         return cmd, response_code, params
 
-    def wait_and_read_message(self):
-        cmd, num_params, len_packet, response_code, params = self._wait_and_read_message()
+    def wait_and_read_message(self, timeout):
+        cmd, num_params, len_packet, response_code, params = self._wait_and_read_message(timeout)
         return cmd, response_code, params
 
     @Profiler.measure
@@ -269,9 +270,12 @@ class Frames:
             raise ValueError("not response")  # TODO: different error type?
 
     @Profiler.measure
-    def send_cmd_wait_answer(self, cmd, params: list or tuple = ()) -> (int, list or tuple):
+    def send_cmd_wait_answer(self, cmd, params: list or tuple = (), timeout=1000) -> (
+            int, list or tuple):
+        if type(params) not in (list, tuple):
+            params = (params,)
         self.create_and_send_packet(cmd, params=params, is_answer=False)
-        cmdr, response_coder, paramsr = self.wait_and_read_message()
+        cmdr, response_coder, paramsr = self.wait_and_read_message(timeout)
         if self._debug >= 3:
             print("scwa", cmdr, response_coder, paramsr)
         self._is_answer(cmd, cmdr)
@@ -302,7 +306,10 @@ class Frames:
                 params[i] = str(param).encode()
             elif type(param) == str:
                 params[i] = param.encode()
-            elif type(param) not in (bytearray, bytes):
+            elif type(param) == bool:
+                params[i] = bytearray(1)
+                params[i][0] = param
+            elif type(param) not in (bytearray, bytes, memoryview):
                 raise TypeError("param {} is not byte object".format(param))
         print("created", cmd, response_code, response_payload, params)
         self.create_packet(cmd, response_code, response_payload, params, is_answer)
@@ -323,10 +330,14 @@ class Frames:
     def translate_answer(self, response_code=None, params=None):
         if type(response_code) in (bytearray, memoryview):
             response_code = response_code[0]
-        if response_code == _RESP_TRUE:
-            return [True] + params
-        elif response_code == _RESP_FALSE:
-            return [False] + params
+        if response_code == _RESP_FALSE or response_code == _RESP_TRUE:
+            if params:
+                if type(params) in (list, tuple) and len(params) == 1:
+                    return params[0]
+                else:
+                    return params
+            return True if response_code == _RESP_TRUE else False
+            # return [False] + params
         elif response_code == _RESP_OSERROR:
             raise OSError(params[0])
         elif response_code == _RESP_EXCEPTION:
@@ -352,3 +363,25 @@ class Frames:
         exc_type = self._find_exception(exception)
         self.create_and_send_packet(cmd, _RESP_EXCEPTION, (exc_type, exception.args[0]),
                                     is_answer=True)
+
+    @staticmethod
+    def transform_args(param: memoryview,
+                       param_type: int | float | str | bytearray | bytes | bool):
+        """Transform param from memoryview into expected type"""
+        if type(param) == param_type:
+            return param
+        elif type(param) != memoryview:
+            raise TypeError("param {} is not memoryview".format(param))
+        if param_type == bytearray:  # should make no sense but whatever.
+            return bytearray(param)
+        elif param_type == bool:
+            return bool(param[0])
+        else:
+            param = bytes(param)
+            if param_type == bytes:
+                return param
+            elif param_type == str:
+                return param.decode()
+            else:  # int|float
+                # Note: This only works if param was sent as ascii bytearray but not as hex
+                return param_type(param)
