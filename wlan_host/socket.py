@@ -30,11 +30,12 @@ _SOCKET_TCP_MODE = const(1)
 def getaddrinfo(wl: WlanHost, host: str, port: int, family=0, socktype=0, proto=0, flags=0):
     host = bytes(host).decode()
     port = int(bytes(port))
-    print("getaddrinfo", host, port, family, socktype, proto, flags)
+    # print("getaddrinfo", host, port, family, socktype, proto, flags)
     try:
         return True, usocket.getaddrinfo(host, port, family, socktype, proto, flags)[0][4][0]
     except Exception as e:
-        print(e)
+        if wl._debug >= 1:
+            sys.print_exception(e)
         return e
 
 
@@ -62,7 +63,8 @@ class Sockets:
         try:
             s = usocket.socket()
         except Exception as e:
-            sys.print_exception(e)
+            if wl._debug >= 1:
+                sys.print_exception(e)
             return e
         pid = next(Sockets._newpid)
         while pid in Sockets._sockets:
@@ -89,8 +91,12 @@ class Sockets:
         port = wl.transform_args(port, int)
         conntype = wl.transform_args(conntype, int)
         blocking = wl.transform_args(blocking, bool)
-        print("connect", socknum, host, port, conntype, blocking)
-        sock = Sockets._get_socket(socknum)
+        if wl._debug >= 3:
+            print("connect", socknum, host, port, conntype, blocking)
+        try:
+            sock = Sockets._get_socket(socknum)
+        except OSError as e:
+            return e
         return sock.connect(host, port, conntype, blocking)
 
     @staticmethod
@@ -99,14 +105,16 @@ class Sockets:
         socknum = wl.transform_args(socknum, int)
         try:
             sock = Sockets._get_socket(socknum)
-        except TypeError:
-            print("Socket already removed", socknum)
-            return True
+        except OSError as e:
+            if e.args[0] == errno.EBADF:  # socket already removed
+                return True
+            return e
         sock.close()
         Sockets._remove_socket(socknum)
         del sock
         gc.collect()
-        print("Closed socket", socknum)
+        if wl._debug >= 3:
+            print("Closed socket", socknum)
         return True
 
     @staticmethod
@@ -115,9 +123,8 @@ class Sockets:
         socknum = wl.transform_args(socknum, int)
         try:
             sock = Sockets._get_socket(socknum)
-        except TypeError:
-            print("Socket doesn't exist", socknum)
-            return OSError, errno.ECONNRESET
+        except OSError as e:
+            return e
         return sock.send(*args)
 
     @staticmethod
@@ -129,8 +136,9 @@ class Sockets:
         try:
             sock = Sockets._get_socket(socknum)
         except TypeError:
-            print("Socket doesn't exist", socknum)
-            return OSError, errno.ECONNRESET
+            if wl._debug >= 3:
+                print("Socket doesn't exist", socknum)
+            return OSError, errno.EBADF
         return sock.recv(bufsize, blocking)
 
 
