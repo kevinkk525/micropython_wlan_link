@@ -23,6 +23,7 @@ _MAX_LEN_PACKET = const(500)
 
 _CMD_HOST_AVAILABLE = const(1)
 _CMD_HOST_STATUS = const(2)
+_CMD_HOST_START = const(3)
 
 
 class WlanClient:
@@ -48,16 +49,27 @@ class WlanClient:
         self._preset(1)
         time.sleep(1)
 
-    def start(self, timeout=10):
+    def _wait_host_up(self, timeout=10):
         st = time.ticks_ms()
-        self._reset_host()
         while time.ticks_diff(time.ticks_ms(), st) < timeout * 1000:
             time.sleep_ms(500)  # host board booting up
             if self.connected():
-                print("Resetting host and connecting took {}s".format(
-                    time.ticks_diff(time.ticks_ms(), st) / 1000))
-                return
+                if self._debug >= 1:
+                    print("Resetting host and connecting took {}s".format(
+                        time.ticks_diff(time.ticks_ms(), st) / 1000))
+                return True
         raise OSError("WlanHost not connected")
+
+    def start(self, ftp_active=False, max_sockets=5, socket_buf_len=_MAX_LEN_PAYLOAD,
+              max_payload_len=_MAX_LEN_PAYLOAD, debug=0, timeout=10):
+        # self._reset_host()
+        self._wait_host_up(timeout)
+        if socket_buf_len > _MAX_LEN_PAYLOAD:
+            raise ValueError("socket_buf_len can't be bigger than {}".format(_MAX_LEN_PAYLOAD))
+        if max_payload_len > _MAX_LEN_PAYLOAD:
+            raise ValueError("max_payload_len can't be bigger than {}".format(_MAX_LEN_PAYLOAD))
+        return self.send_cmd_wait_answer(_CMD_HOST_START, (
+            ftp_active, max_sockets, socket_buf_len, max_payload_len, debug), timeout=5000)
 
     def connected(self) -> bool:
         try:

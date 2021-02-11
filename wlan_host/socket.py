@@ -14,8 +14,6 @@ import gc
 import errno
 import sys
 
-_MAX_LEN_PAYLOAD = const(400)
-
 _CMD_GETADDRINFO = const(20)
 _CMD_GET_SOCKET = const(21)
 _CMD_CLOSE_SOCKET = const(22)
@@ -52,6 +50,7 @@ class Sockets:
     max_sockets = 16  # ESP32 raises Exception with more than 5 sockets?
     active_sockets = 0
     socket_rx_buffer = 400  # rx buffer for socket object
+    max_payload_len = 400
 
     @staticmethod
     @wlanHandler.register(_CMD_GET_SOCKET)

@@ -26,6 +26,7 @@ _MAX_LEN_PACKET = const(500)
 
 _CMD_HOST_AVAILABLE = const(1)
 _CMD_HOST_STATUS = const(2)
+_CMD_HOST_START = const(3)
 
 
 class WlanHost:
@@ -39,6 +40,7 @@ class WlanHost:
         ready_pin.init(mode=Pin.OUT, value=0)
         global _wlan_host
         _wlan_host = self
+        self._started = False  # TODO: don't execute other functions if not started?
         self._listen_task = asyncio.create_task(self.listen())
         # notify client on restart by signalling data available.
 
@@ -65,7 +67,9 @@ class WlanHost:
             stu = time.ticks_us()
             try:
                 resp = wlanHandler.get(cmd)(self, *params)
-                if type(resp) not in (list, tuple):
+                if resp is None:
+                    raise TypeError("No registered function is allowed to return None")
+                elif type(resp) not in (list, tuple):
                     resp = (resp,)
                 if resp[0] is True:
                     self._frames.send_true(cmd, resp[1:] if len(resp) > 1 else None)
@@ -85,16 +89,17 @@ class WlanHost:
                     sys.print_exception(e)
                 continue
             etu = time.ticks_us()
-            print("Time to answer sent", time.ticks_diff(etu, stu))
-            print("Whost got packet", cmd, response_code, params)
-            try:
-                for param in params:
-                    if type(param) in (bytearray, memoryview):
-                        print(bytes(param))
-                    else:
-                        print(param)
-            except:
-                pass
+            if self._debug>=1:
+                print("Time to answer sent", time.ticks_diff(etu, stu))
+                print("Whost got packet", cmd, response_code, params)
+                try:
+                    for param in params:
+                        if type(param) in (bytearray, memoryview):
+                            print(bytes(param))
+                        else:
+                            print(param)
+                except:
+                    pass
             gc.collect()
 
     @wlanHandler.register(_CMD_HOST_AVAILABLE)
@@ -103,7 +108,7 @@ class WlanHost:
         return True
 
     @wlanHandler.register(_CMD_HOST_STATUS)
-    def status(self, wl, *args):
+    def status(self, *args):
         """Return statistics about host, #sockets, mem_free, wifi status etc"""
         st = dict()
         st["num_sockets"] = 0  # TODO: when sockets implemented
@@ -114,6 +119,24 @@ class WlanHost:
     @staticmethod
     def transform_args(param: memoryview, param_type: int | float | str | bytearray | bytes):
         return Frames.transform_args(param, param_type)
+
+    @wlanHandler.register(_CMD_HOST_START)
+    def start(self, ftp_active, max_sockets, socket_buf_len, max_payload_len, debug):
+        ftp_active = self.transform_args(ftp_active, bool)
+        max_sockets = self.transform_args(max_sockets, int)
+        socket_buf_len = self.transform_args(socket_buf_len, int)
+        max_payload_len = self.transform_args(max_payload_len, int)
+        debug = self.transform_args(debug, int)
+        from .socket import Sockets
+        Sockets.max_sockets = max_sockets
+        Sockets.socket_rx_buffer = socket_buf_len  # TODO: does not impact Frames buffer length yet!
+        Sockets.max_payload_len = max_payload_len  # So don't make this bigger than the Frames buf
+        self._debug = debug
+        self._frames._debug = debug
+        # Sockets reads debug from wlhost
+        if ftp_active:
+            import ftp_thread
+        return True
 
 
 def get_host() -> WlanHost:

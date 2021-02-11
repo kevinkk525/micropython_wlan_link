@@ -9,6 +9,8 @@ __version__ = "0.1"
 
 from micropython import const
 from .wclient import get_client, WlanClient
+import errno
+from wlan_link_libs.profiler import Profiler
 
 SOCK_STREAM = const(1)
 AF_INET = const(2)
@@ -38,6 +40,7 @@ def getaddrinfo(host: str, port: int, family=0, socktype=0, proto=0, flags=0):
 
 # TODO: handle connection exceptions
 # TODO: implement timeout with blocking socket
+# TODO: don't query after socket closed. or too much code for unlikely scenario?
 
 class socket:
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0,
@@ -53,9 +56,14 @@ class socket:
         self._closed = False
         print(self._socknum)
 
+    def _check_closed(self):
+        if self._closed:
+            raise OSError(errno.EBADF)
+
     def close(self):
-        get_client().send_cmd_wait_answer(_CMD_CLOSE_SOCKET, self._socknum)
-        self._closed = True
+        if not self._closed:
+            get_client().send_cmd_wait_answer(_CMD_CLOSE_SOCKET, self._socknum)
+            self._closed = True
 
     def setblocking(self, blocking: bool):
         self._blocking = blocking
@@ -64,6 +72,7 @@ class socket:
         """Connect the socket to the 'address' (which can be 32bit packed IP or
         a hostname string). 'conntype' is an extra that may indicate SSL or not,
         depending on the underlying interface"""
+        self._check_closed()
         host, port = address
         if conntype is None:
             conntype = _SOCKET_TCP_MODE
@@ -72,8 +81,10 @@ class socket:
                                           timeout=30000 if self._blocking else 1000)
         self._buffer = b""
 
+    @Profiler.measure
     def send(self, data) -> int:
         """Send some data to the socket"""
+        self._check_closed()
         if len(data) > _MAX_LEN_PAYLOAD:
             raise ValueError("Payload too long")  # could split it up but good for now.
         if len(data) > 255:  # limited to 255 because of 1 byte for param length in param header
@@ -88,7 +99,9 @@ class socket:
             d = (self._socknum, data)
         return get_client().send_cmd_wait_answer(_CMD_SEND_SOCKET, d)
 
+    @Profiler.measure
     def recv(self, bufsize=0):
+        self._check_closed()
         if bufsize == 0:
             return b''
         elif bufsize > _MAX_LEN_PAYLOAD:
@@ -100,5 +113,6 @@ class socket:
 
     def __del__(self):
         """Just in case?"""
+        print("__del__")
         if not self._closed:
             self.close()
