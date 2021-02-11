@@ -206,7 +206,7 @@ class Frames:
         cmd, num_params, len_packet, response_code, params = self._wait_and_read_message(timeout)
         return cmd, response_code, params
 
-    @Profiler.measure
+    # @Profiler.measure
     def _wait_and_read_message(self, timeout=1000):
         """wait for a new message until timeout in ms is reached"""
         if not self._comm.wait_byte(_START_CMD, True, timeout=timeout):
@@ -222,7 +222,7 @@ class Frames:
             print("Received full frame:", cmd, num_params, len_packet, response_code, payload)
         return cmd, num_params, len_packet, response_code, payload
 
-    @Profiler.measure
+    # @Profiler.measure
     def _create_packet(self, cmd, num_params, *args, response_code=None, is_answer=False):
         # num_params can be 0 with response_code and payload in header but
         # also >1 with payload in params
