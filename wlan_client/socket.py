@@ -33,7 +33,7 @@ def getaddrinfo(host: str, port: int, family=0, socktype=0, proto=0, flags=0):
     if not isinstance(port, int):
         raise TypeError("Port must be an integer")
     ipaddr = get_client().send_cmd_wait_answer(_CMD_GETADDRINFO, (host, port))
-    print("getaddr", ipaddr)
+    # print("getaddr", ipaddr)
     ipaddr = WlanClient.transform_args(ipaddr, str)
     return [(AF_INET, socktype, proto, "", (ipaddr, port))]
 
@@ -53,7 +53,7 @@ class socket:
         self._timeout = None  # None=blocking without timeout, 0=non-blocking
         self._blocking = True
         self._closed = False
-        print(self._socknum)
+        # print(self._socknum)
 
     def _check_closed(self):
         if self._closed:

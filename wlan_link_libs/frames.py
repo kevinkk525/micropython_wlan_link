@@ -6,12 +6,26 @@ __updated__ = "2021-02-10"
 __version__ = "0.3"
 
 from micropython import const
-from wlan_link_libs.crc import crc16
+#from wlan_link_libs.crc import crc16
 import errno
 import time
 from wlan_link_libs.uart import WUart
 from .profiler import Profiler
 import struct
+import micropython
+
+
+# @Profiler.measure
+@micropython.native
+def hash(header, params=()):
+    result = 0xceed
+
+    for msg in ([header], params):
+        for arg in msg:
+            for c in arg:
+                result = (result * 17 ^ c) & 0xffff
+    return result
+
 
 _EXCEPTIONS = (ValueError, TypeError, AttributeError, NotImplementedError, Exception)
 
@@ -58,7 +72,7 @@ class Frames:
         buf = memoryview(self._readbuf)
         buf[5] = 0  # reset crc16 in buffer
         buf[6] = 0
-        crc_new = crc16(buf[:len_packet])
+        crc_new = hash(buf[:len_packet])
         buf[5] = crc >> 8  # save old crc16 again
         buf[6] = crc & 0xFF
         if crc_new != crc:
@@ -75,7 +89,7 @@ class Frames:
         buf = memoryview(self._sendbuf)
         buf[5] = 0
         buf[6] = 0
-        crc = crc16(buf[:_LEN_HEADER + num_params * 2], params)
+        crc = hash(buf[:_LEN_HEADER + num_params * 2], params)
         buf[5] = crc >> 8
         buf[6] = crc & 0xFF
 

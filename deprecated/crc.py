@@ -1,4 +1,4 @@
-from .profiler import Profiler
+from wlan_link_libs.profiler import Profiler
 import micropython
 import array
 import gc
