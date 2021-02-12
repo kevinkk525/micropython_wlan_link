@@ -1,13 +1,33 @@
-# from .profiler import Profiler
+from .profiler import Profiler
+import micropython
+import array
+import gc
 
-_table = b'\x00Y\xb2\xeb=d\x8f\xd6z#\xc8\x91G\x1e\xf5\xac\xf4\xadF\x1f\xc9\x90{"\x8e\xd7<e\xb3\xea\x01X\xb1\xe8\x03Z\x8c\xd5>g\xcb\x92y \xf6\xafD\x1dE\x1c\xf7\xaex!\xca\x93?f\x8d\xd4\x02[\xb0\xe9;b\x89\xd0\x06_\xb4\xedA\x18\xf3\xaa|%\xce\x97\xcf\x96}$\xf2\xab@\x19\xb5\xec\x07^\x88\xd1:c\x8a\xd38a\xb7\xee\x05\\\xf0\xa9B\x1b\xcd\x94\x7f&~\'\xcc\x95C\x1a\xf1\xa8\x04]\xb6\xef9`\x8b\xd2v/\xc4\x9dK\x12\xf9\xa0\x0cU\xbe\xe71h\x83\xda\x82\xdb0i\xbf\xe6\rT\xf8\xa1J\x13\xc5\x9cw.\xc7\x9eu,\xfa\xa3H\x11\xbd\xe4\x0fV\x80\xd92k3j\x81\xd8\x0eW\xbc\xe5I\x10\xfb\xa2t-\xc6\x9fM\x14\xff\xa6p)\xc2\x9b7n\x85\xdc\nS\xb8\xe1\xb9\xe0\x0bR\x84\xdd6o\xc3\x9aq(\xfe\xa7L\x15\xfc\xa5N\x17\xc1\x98s*\x86\xdf4m\xbb\xe2\tP\x08Q\xba\xe35l\x87\xder+\xc0\x99O\x16\xfd\xa4'
+POLYNOMIAL = 0xA001
 
 
-# @Profiler.measure
-def crc8(*args, initial_value=0):
-    _sum = initial_value
-    table = _table
-    for arg in args:
-        for byte in arg:
-            _sum = table[_sum ^ byte]
-    return _sum
+def _initial(c):
+    crc = 0
+    for j in range(8):
+        if (crc ^ c) & 0x1:
+            crc = (crc >> 1) ^ POLYNOMIAL
+        else:
+            crc = crc >> 1
+        c = c >> 1
+    return crc
+
+
+crc16_tab = array.array("H", [_initial(i) for i in range(256)])
+gc.collect()
+
+
+@Profiler.measure
+@micropython.native
+def crc16(header, params=(), initial_value=0):
+    _tab = crc16_tab
+    crc = initial_value
+    for msg in ([header], params):
+        for arg in msg:
+            for c in arg:
+                crc = (crc >> 8) ^ _tab[(crc ^ c) & 0xff]
+    return crc
