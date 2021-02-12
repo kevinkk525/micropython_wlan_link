@@ -27,7 +27,6 @@ _SOCKET_TCP_MODE = const(1)
 @wlanHandler.register(_CMD_GETADDRINFO)
 def getaddrinfo(wl: WlanHost, host: str, port: int, family=0, socktype=0, proto=0, flags=0):
     host = bytes(host).decode()
-    port = int(bytes(port))
     # print("getaddrinfo", host, port, family, socktype, proto, flags)
     try:
         return True, usocket.getaddrinfo(host, port, family, socktype, proto, flags)[0][4][0]
@@ -68,7 +67,7 @@ class Sockets:
         pid = next(Sockets._newpid)
         while pid in Sockets._sockets:
             pid = next(Sockets._newpid)
-        Sockets._sockets[pid] = socket(s, pid, Sockets.socket_rx_buffer)
+        Sockets._sockets[pid] = socket(wl, s, pid, Sockets.socket_rx_buffer)
         return True, pid
 
     @staticmethod
@@ -84,12 +83,8 @@ class Sockets:
 
     @staticmethod
     @wlanHandler.register(_CMD_CONNECT_SOCKET)
-    def connect(wl: WlanHost, socknum, host, port, conntype, blocking):
-        socknum = wl.transform_args(socknum, int)
-        host = wl.transform_args(host, str)
-        port = wl.transform_args(port, int)
-        conntype = wl.transform_args(conntype, int)
-        blocking = wl.transform_args(blocking, bool)
+    def connect(wl: WlanHost, socknum: int, host: str, port: int, conntype: int, blocking: bool):
+        host = bytes(host).decode()
         if wl._debug >= 3:
             print("connect", socknum, host, port, conntype, blocking)
         try:
@@ -100,8 +95,7 @@ class Sockets:
 
     @staticmethod
     @wlanHandler.register(_CMD_CLOSE_SOCKET)
-    def close(wl: WlanHost, socknum):
-        socknum = wl.transform_args(socknum, int)
+    def close(wl: WlanHost, socknum: int):
         try:
             sock = Sockets._get_socket(socknum)
         except OSError as e:
@@ -118,8 +112,7 @@ class Sockets:
 
     @staticmethod
     @wlanHandler.register(_CMD_SEND_SOCKET)
-    def send(wl: WlanHost, socknum, *args):
-        socknum = wl.transform_args(socknum, int)
+    def send(wl: WlanHost, socknum: int, *args):
         try:
             sock = Sockets._get_socket(socknum)
         except OSError as e:
@@ -128,10 +121,7 @@ class Sockets:
 
     @staticmethod
     @wlanHandler.register(_CMD_RECV_SOCKET)
-    def recv(wl: WlanHost, socknum, bufsize, blocking):
-        socknum = wl.transform_args(socknum, int)
-        bufsize = wl.transform_args(bufsize, int)
-        blocking = wl.transform_args(blocking, bool)
+    def recv(wl: WlanHost, socknum: int, bufsize: int, blocking: bool):
         try:
             sock = Sockets._get_socket(socknum)
         except TypeError:
@@ -142,19 +132,22 @@ class Sockets:
 
 
 class socket:
-    def __init__(self, sock: usocket, socknum: int, len_buffer: int):
+    def __init__(self, wl: WlanHost, sock: usocket, socknum: int, len_buffer: int):
         self._socknum = socknum
         self._sock = sock
         self._buffer = bytearray(len_buffer)
         self._conntype = None
+        self._wl = wl
 
     def connect(self, host: str, port: int, conntype: int, blocking: bool):
-        print("Connecting")
+        if self._wl._debug >= 3:
+            print("Connecting")
         self._conntype = conntype
         self._sock.setblocking(blocking)
         try:
             self._sock.connect((host, port))
-            print("Connected")
+            if self._wl._debug >= 3:
+                print("Connected")
             return True
         except OSError as e:
             return e
@@ -183,13 +176,13 @@ class socket:
         except Exception as e:
             sys.print_exception(e)
             return e
-        if len(data) > 255:  # limited to 255 because of 1 byte for param length in param header
+        if len(data) > 1023:  # limited to 1023 because of 10 bit for param length in param header
             d = [True]
             c = 0
             if type(data) != memoryview:
                 data = memoryview(data)
             while c < len(data):
-                d.append(data[c:c + 255])
-                c += 255
+                d.append(data[c:c + 1023])
+                c += 1023
             return d
         return True, data

@@ -40,7 +40,6 @@ def getaddrinfo(host: str, port: int, family=0, socktype=0, proto=0, flags=0):
 
 # TODO: handle connection exceptions
 # TODO: implement timeout with blocking socket
-# TODO: don't query after socket closed. or too much code for unlikely scenario?
 
 class socket:
     def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0,
@@ -76,9 +75,15 @@ class socket:
         host, port = address
         if conntype is None:
             conntype = _SOCKET_TCP_MODE
-        get_client().send_cmd_wait_answer(_CMD_CONNECT_SOCKET,
-                                          (self._socknum, host, port, conntype, self._blocking),
-                                          timeout=30000 if self._blocking else 1000)
+        try:
+            get_client().send_cmd_wait_answer(_CMD_CONNECT_SOCKET,
+                                              (
+                                                  self._socknum, host, port, conntype,
+                                                  self._blocking),
+                                              timeout=30000 if self._blocking else 1000)
+        except Exception as e:
+            self.close()
+            raise e
         self._buffer = b""
 
     @Profiler.measure
@@ -87,14 +92,14 @@ class socket:
         self._check_closed()
         if len(data) > _MAX_LEN_PAYLOAD:
             raise ValueError("Payload too long")  # could split it up but good for now.
-        if len(data) > 255:  # limited to 255 because of 1 byte for param length in param header
+        if len(data) > 1023:  # limited to 255 because of 10 bit for param length in param header
             d = [self._socknum]
             c = 0
             if type(data) != memoryview:
                 data = memoryview(data)
             while c < len(data):
-                d.append(data[c:c + 255])
-                c += 255
+                d.append(data[c:c + 1023])
+                c += 1023
         else:
             d = (self._socknum, data)
         return get_client().send_cmd_wait_answer(_CMD_SEND_SOCKET, d)
