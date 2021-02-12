@@ -45,7 +45,7 @@ class WUart:
                     print("Read", data, "Expected", b)
                 return False
 
-    @Profiler.measure
+    # @Profiler.measure
     def wait_byte(self, b, wait=True, timeout=None):
         st = time.ticks_ms()
         stu = time.ticks_us()
@@ -62,9 +62,9 @@ class WUart:
                 time.sleep_ms(1)
                 continue
             if data[0] == b:
-                # if self._debug >= 3:
-                etu = time.ticks_us()
-                print("Found", data, "waited", time.ticks_diff(etu, stu))
+                if self._debug >= 3:
+                    etu = time.ticks_us()
+                    print("Found", data, "waited", time.ticks_diff(etu, stu))
                 return True
             elif not wait:
                 if self._debug >= 1:

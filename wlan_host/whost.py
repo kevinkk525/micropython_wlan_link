@@ -63,7 +63,8 @@ class WlanHost:
                     import sys
                     sys.print_exception(e)
                 continue
-            print("got frame", cmd, response_code, params)
+            if self._debug >= 1:
+                print("got frame", cmd, response_code, params)
             stu = time.ticks_us()
             try:
                 resp = wlanHandler.get(cmd)(self, *params)
@@ -89,7 +90,7 @@ class WlanHost:
                     sys.print_exception(e)
                 continue
             etu = time.ticks_us()
-            if self._debug>=1:
+            if self._debug >= 1:
                 print("Time to answer sent", time.ticks_diff(etu, stu))
                 print("Whost got packet", cmd, response_code, params)
                 try:
@@ -116,23 +117,16 @@ class WlanHost:
         st["wlan_connected"] = network.WLAN(network.STA_IF).isconnected()
         return True, json.dumps(st).encode()
 
-    @staticmethod
-    def transform_args(param: memoryview, param_type: int | float | str | bytearray | bytes):
-        return Frames.transform_args(param, param_type)
-
     @wlanHandler.register(_CMD_HOST_START)
-    def start(self, ftp_active, max_sockets, socket_buf_len, max_payload_len, debug):
-        ftp_active = self.transform_args(ftp_active, bool)
-        max_sockets = self.transform_args(max_sockets, int)
-        socket_buf_len = self.transform_args(socket_buf_len, int)
-        max_payload_len = self.transform_args(max_payload_len, int)
-        debug = self.transform_args(debug, int)
+    def start(self, ftp_active: bool, max_sockets: int, socket_buf_len: int, max_payload_len: int,
+              debug: int):
         from .socket import Sockets
         Sockets.max_sockets = max_sockets
         Sockets.socket_rx_buffer = socket_buf_len  # TODO: does not impact Frames buffer length yet!
         Sockets.max_payload_len = max_payload_len  # So don't make this bigger than the Frames buf
         self._debug = debug
         self._frames._debug = debug
+        self._comm._debug = debug
         # Sockets reads debug from wlhost
         if ftp_active:
             import ftp_thread
