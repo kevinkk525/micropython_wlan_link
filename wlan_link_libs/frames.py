@@ -6,7 +6,7 @@ __updated__ = "2021-02-10"
 __version__ = "0.3"
 
 from micropython import const
-#from wlan_link_libs.crc import crc16
+# from wlan_link_libs.crc import crc16
 import errno
 import time
 from wlan_link_libs.uart import WUart
@@ -14,6 +14,8 @@ from .profiler import Profiler
 import struct
 import micropython
 
+
+# https://forum.micropython.org/viewtopic.php?p=54899#p54899
 
 # @Profiler.measure
 @micropython.native
@@ -23,7 +25,7 @@ def hash(header, params=()):
     for msg in ([header], params):
         for arg in msg:
             for c in arg:
-                result = (result * 17 ^ c) & 0xffff
+                result = (result * 73 ^ c) & 0xffff
     return result
 
 
@@ -123,7 +125,6 @@ class Frames:
         buf[3] = buf[3] & ((response_code << 4) | 0x0F)
         buf[4] = payload
 
-    # @Profiler.measure
     def _create_param_header(self, params: list, types: list) -> int:
         """Create a param header if more than 1 params in frame, otherwise it is not needed"""
         if len(params) == 0:
@@ -136,7 +137,6 @@ class Frames:
             sendbuf[_LEN_HEADER + i * 2 + 1] = len(param) & 0xFF
         return len(params) * 2
 
-    # @Profiler.measure
     def _transform_from_payload(self, head: memoryview, p: memoryview):
         cnt = 0
         params = []
@@ -295,7 +295,7 @@ class Frames:
                 print("not respone", cmd, cmdr)
             raise ValueError("not response")  # TODO: different error type?
 
-    @Profiler.measure
+    # @Profiler.measure
     def send_cmd_wait_answer(self, cmd, params: list or tuple = (), timeout=1000) -> (
             int, list or tuple):
         if type(params) not in (list, tuple):

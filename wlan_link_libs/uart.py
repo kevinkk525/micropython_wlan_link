@@ -21,7 +21,6 @@ class CommError(OSError):
 class WUart:
     def __init__(self, uart: machine.UART, debug: int = 0):
         self._uart = uart
-        self._uart.init(timeout=10)
         self._ustream = asyncio.StreamReader(uart)
         self._debug = debug
 
@@ -107,7 +106,7 @@ class WUart:
         stu = time.ticks_us()
         while to_read and time.ticks_diff(time.ticks_ms(), st) < timeout:
             if self._uart.any():
-                r = self._uart.readinto(buffer, to_read)  # does RPI PICO support timeout yet?
+                r = self._uart.readinto(buffer, to_read)
                 if r is None:
                     if self._debug >= 1:
                         print("No more data on uart, expected", length, "got", r, "bytes")

@@ -24,7 +24,7 @@ class Profiler:
 
         def wrapper(*args, **kwargs):
             m = gc.mem_free()
-            n = f.__name__ if hasattr(f, "__name__") else str(f)
+            n = f  # .__name__ if hasattr(f, "__name__") else str(f)
             stu = time.ticks_us()
             Profiler._storage.append((stu, m, n, -1))
             try:
@@ -60,4 +60,6 @@ class Profiler:
             print("{} {} {} {}Byt  {}{}\t{}".format(state, depth_f, func[0], func[1],
                                                     func[3] if func[3] > 0 else "   ",
                                                     "us" if func[3] > 0 else "  ",
-                                                    func[2]))
+                                                    func[2].__name__ if hasattr(func[2],
+                                                                                "__name__") else str(
+                                                        func[2])))

@@ -71,6 +71,7 @@ class WlanClient:
         return self.send_cmd_wait_answer(_CMD_HOST_START, (
             ftp_active, max_sockets, socket_buf_len, max_payload_len, debug), timeout=5000)
 
+    @Profiler.measure
     def connected(self) -> bool:
         try:
             self._frames.send_cmd_wait_answer(_CMD_HOST_AVAILABLE)
@@ -83,6 +84,7 @@ class WlanClient:
             gc.collect()
         return True
 
+    @Profiler.measure
     def status(self, key=None):
         """returns multiple information about #sockets, mem_free, wifi status ..."""
         try:
@@ -107,10 +109,6 @@ class WlanClient:
         if timeout is None:
             timeout = 100000000  # 100k seconds
         return self._frames.send_cmd_wait_answer(cmd, params, timeout)
-
-    @staticmethod
-    def transform_args(param: memoryview, param_type: int | float | str | bytearray | bytes):
-        return Frames.transform_args(param, param_type)
 
 
 def get_client() -> WlanClient:
